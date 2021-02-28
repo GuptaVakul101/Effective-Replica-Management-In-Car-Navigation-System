@@ -3,6 +3,7 @@ from multiprocessing import Process
 import sys
 import selectors
 import types
+import struct
 
 CENTRAL_HOST='127.0.0.1'
 CENTRAL_PORT=65432
@@ -11,15 +12,13 @@ SELF_HOST='127.0.0.1'
 SELF_PORT=65433
 
 def connect_to_central():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((CENTRAL_HOST, CENTRAL_PORT))
-        s.sendall(b'Hello, world')
-        data = s.recv(1024)
-    print('Received', repr(data))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.connect((CENTRAL_HOST, CENTRAL_PORT))
+        data = sock.recv(1024)
 
 def accept_wrapper(sock, sel):
     conn, addr = sock.accept()  # Should be ready to read
-    print('accepted connection from', addr)
+    print('Edge node 1 accepted connection from', addr)
     conn.setblocking(False)
     data = types.SimpleNamespace(addr=addr, inb=b'', outb=b'')
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
@@ -33,7 +32,7 @@ def service_connection(key, mask, sel):
         if recv_data:
             data.outb += recv_data
         else:
-            print('closing connection to', data.addr)
+            print('Edge node 1 closing connection to', data.addr)
             sel.unregister(sock)
             sock.close()
     if mask & selectors.EVENT_WRITE:
@@ -47,7 +46,7 @@ def connect_to_clients():
     lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     lsock.bind((SELF_HOST, SELF_PORT))
     lsock.listen()
-    print('listening on', (SELF_HOST, SELF_PORT))
+    print('Edge node 1 listening on', (SELF_HOST, SELF_PORT))
     lsock.setblocking(False)
     sel.register(lsock, selectors.EVENT_READ, data=None)
     while True:
@@ -60,7 +59,7 @@ def connect_to_clients():
 
 def main():
     p1 = Process(target = connect_to_central)
-    p1.start()
+    # p1.start()
     p2 = Process(target = connect_to_clients)
     p2.start()
 

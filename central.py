@@ -5,6 +5,12 @@ import types
 SELF_HOST='127.0.0.1'
 SELF_PORT=65432
 
+NUM_DATA_BLOCKS = 1000
+NUM_EDGE_NODES = 2
+
+T = 1
+K = 5
+
 def accept_wrapper(sock, sel):
     conn, addr = sock.accept()  # Should be ready to read
     print('accepted connection from', addr)
@@ -35,7 +41,7 @@ def main():
     lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     lsock.bind((SELF_HOST, SELF_PORT))
     lsock.listen()
-    print('listening on', (SELF_HOST, SELF_PORT))
+    print('Central node listening on', (SELF_HOST, SELF_PORT))
     lsock.setblocking(False)
     sel.register(lsock, selectors.EVENT_READ, data=None)
     while True:
@@ -47,4 +53,6 @@ def main():
                 service_connection(key, mask, sel)
 
 if __name__ == "__main__":
+    global BIN_ENCODING
+    BIN_ENCODING = [[0 for x in range(NUM_DATA_BLOCKS)] for y in range(NUM_EDGE_NODES)]
     main()
