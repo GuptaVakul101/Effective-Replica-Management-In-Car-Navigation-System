@@ -1,6 +1,8 @@
 import socket
 import selectors
 import types
+import random
+import sys
 
 SELF_HOST='127.0.0.1'
 SELF_PORT=65432
@@ -55,4 +57,6 @@ def main():
 if __name__ == "__main__":
     global BIN_ENCODING
     BIN_ENCODING = [[0 for x in range(NUM_DATA_BLOCKS)] for y in range(NUM_EDGE_NODES)]
+    global DATA
+    DATA = [random.randint(0,sys.maxsize) for x in range(NUM_DATA_BLOCKS)]
     main()

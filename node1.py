@@ -4,12 +4,23 @@ import sys
 import selectors
 import types
 import struct
+from central import NUM_DATA_BLOCKS
+import json
+import time
+from utils import recv_timeout
 
 CENTRAL_HOST='127.0.0.1'
 CENTRAL_PORT=65432
 
 SELF_HOST='127.0.0.1'
 SELF_PORT=65433
+
+def find_data_blocks(data_blocks):
+    return_data = []
+    for id in data_blocks:
+        if DATA[id] != -1:
+            return_data.append(DATA[id])
+    return return_data
 
 def connect_to_central():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -28,7 +39,7 @@ def service_connection(key, mask, sel):
     sock = key.fileobj
     data = key.data
     if mask & selectors.EVENT_READ:
-        recv_data = sock.recv(1024)  # Should be ready to read
+        recv_data = recv_timeout(sock)  # Should be ready to read
         if recv_data:
             data.outb += recv_data
         else:
@@ -37,9 +48,14 @@ def service_connection(key, mask, sel):
             sock.close()
     if mask & selectors.EVENT_WRITE:
         if data.outb:
-            print('echoing', repr(data.outb), 'to', data.addr)
-            sent = sock.send(data.outb)  # Should be ready to write
-            data.outb = data.outb[sent:]
+            str_data = data.outb.decode("utf-8")
+            json_data = json.loads(str_data)
+            if json_data["data_blocks"]:
+                return_data = find_data_blocks(json_data["data_blocks"])
+                return_data = {"data": return_data}
+                return_data = json.dumps(return_data)
+                sock.sendall(bytes(return_data, encoding="utf-8"))
+                data.outb = bytearray()
 
 def connect_to_clients():
     sel = selectors.DefaultSelector()
@@ -64,4 +80,6 @@ def main():
     p2.start()
 
 if __name__ == "__main__":
+    global DATA
+    DATA = [-1 for x in range(NUM_DATA_BLOCKS)]
     main()
