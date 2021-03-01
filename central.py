@@ -3,6 +3,8 @@ import selectors
 import types
 import random
 import sys
+from utils import recv_timeout
+import json
 
 SELF_HOST='127.0.0.1'
 SELF_PORT=65432
@@ -10,7 +12,7 @@ SELF_PORT=65432
 NUM_DATA_BLOCKS = 1000
 NUM_EDGE_NODES = 2
 
-T = 1
+T = 2
 K = 5
 
 def accept_wrapper(sock, sel):
@@ -25,7 +27,7 @@ def service_connection(key, mask, sel):
     sock = key.fileobj
     data = key.data
     if mask & selectors.EVENT_READ:
-        recv_data = sock.recv(1024)  # Should be ready to read
+        recv_data = recv_timeout(sock)  # Should be ready to read
         if recv_data:
             data.outb += recv_data
         else:
@@ -34,9 +36,12 @@ def service_connection(key, mask, sel):
             sock.close()
     if mask & selectors.EVENT_WRITE:
         if data.outb:
-            print('echoing', repr(data.outb), 'to', data.addr)
-            sent = sock.send(data.outb)  # Should be ready to write
-            data.outb = data.outb[sent:]
+            str_data = data.outb.decode("utf-8")
+            json_data = json.loads(str_data)
+            print(json_data)
+            # print('echoing', repr(data.outb), 'to', data.addr)
+            # sent = sock.send(data.outb)  # Should be ready to write
+            data.outb = bytearray()
 
 def main():
     sel = selectors.DefaultSelector()

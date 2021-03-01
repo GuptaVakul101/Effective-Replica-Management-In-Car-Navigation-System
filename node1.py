@@ -4,10 +4,13 @@ import sys
 import selectors
 import types
 import struct
-from central import NUM_DATA_BLOCKS
+from central import NUM_DATA_BLOCKS, T
 import json
 import time
 from utils import recv_timeout
+from time import sleep
+import threading
+from threading import Thread
 
 CENTRAL_HOST='127.0.0.1'
 CENTRAL_PORT=65432
@@ -22,10 +25,27 @@ def find_data_blocks(data_blocks):
             return_data.append(DATA[id])
     return return_data
 
+def send_info_central(sock):
+    global NUM_ACCESS_DATA
+    global RT_DATA
+    dict_RT = {"RT_DATA": RT_DATA, "NUM_ACCESS_DATA": NUM_ACCESS_DATA, "id": 1}
+    json_RT = json.dumps(dict_RT)
+    sock.sendall(bytes(json_RT, encoding="utf-8"))
+
 def connect_to_central():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect((CENTRAL_HOST, CENTRAL_PORT))
-        data = sock.recv(1024)
+    global lock
+    global NUM_ACCESS_DATA
+    global RT_DATA
+    while True:
+        sleep(T)
+        lock.acquire()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((CENTRAL_HOST, CENTRAL_PORT))
+            send_info_central(sock)
+        for id in range(0,NUM_DATA_BLOCKS):
+            NUM_ACCESS_DATA[id] = 0
+            RT_DATA[id] = -1
+        lock.release()
 
 def accept_wrapper(sock, sel):
     conn, addr = sock.accept()  # Should be ready to read
@@ -36,6 +56,9 @@ def accept_wrapper(sock, sel):
     sel.register(conn, events, data=data)
 
 def service_connection(key, mask, sel):
+    global lock
+    global NUM_ACCESS_DATA
+    global RT_DATA
     sock = key.fileobj
     data = key.data
     if mask & selectors.EVENT_READ:
@@ -50,12 +73,20 @@ def service_connection(key, mask, sel):
         if data.outb:
             str_data = data.outb.decode("utf-8")
             json_data = json.loads(str_data)
-            if json_data["data_blocks"]:
+            if "data_blocks" in json_data.keys():
                 return_data = find_data_blocks(json_data["data_blocks"])
                 return_data = {"data": return_data}
                 return_data = json.dumps(return_data)
                 sock.sendall(bytes(return_data, encoding="utf-8"))
                 data.outb = bytearray()
+            elif "RT" in json_data.keys():
+                lock.acquire()
+                for id in json_data["RT_data_blocks"]:
+                    RT_DATA[id] = json_data["RT"]
+                    NUM_ACCESS_DATA[id] += 1
+                print(NUM_ACCESS_DATA)
+                data.outb = bytearray()
+                lock.release()
 
 def connect_to_clients():
     sel = selectors.DefaultSelector()
@@ -74,12 +105,16 @@ def connect_to_clients():
                 service_connection(key, mask, sel)
 
 def main():
-    p1 = Process(target = connect_to_central)
-    # p1.start()
-    p2 = Process(target = connect_to_clients)
-    p2.start()
+    Thread(target = connect_to_central).start()
+    Thread(target = connect_to_clients).start()
 
 if __name__ == "__main__":
     global DATA
     DATA = [-1 for x in range(NUM_DATA_BLOCKS)]
+    global RT_DATA
+    RT_DATA = [-1 for x in range(NUM_DATA_BLOCKS)]
+    global NUM_ACCESS_DATA
+    NUM_ACCESS_DATA = [0 for x in range(NUM_DATA_BLOCKS)]
+    global lock
+    lock = threading.Lock()
     main()

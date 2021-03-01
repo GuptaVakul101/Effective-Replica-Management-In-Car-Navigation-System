@@ -1,6 +1,7 @@
 import time
+TIMEOUT = 1
 
-def recv_timeout(the_socket, timeout=1):
+def recv_timeout(the_socket, timeout=TIMEOUT):
     #make socket non blocking
     the_socket.setblocking(0)
 
