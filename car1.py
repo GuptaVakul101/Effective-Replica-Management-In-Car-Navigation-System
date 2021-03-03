@@ -17,7 +17,7 @@ def query(sock):
     sock.sendall(bytes(data, encoding="utf-8"))
     received = recv_timeout(sock)
     received = received.decode("utf-8")
-    print(received)
+    # print(received)
     return data_blocks
 
 def send_RT(RT, data_blocks, sock):
@@ -26,15 +26,16 @@ def send_RT(RT, data_blocks, sock):
     sock.sendall(bytes(json_RT, encoding="utf-8"))
 
 def connect_to_edge_node():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect((NODE_HOST, NODE_PORT))
-        queryStartTime = time.time()
-        data_blocks = query(sock)   # List of queried data blocks
-        queryEndTime = time.time()
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((NODE_HOST, NODE_PORT))
+            queryStartTime = time.time()
+            data_blocks = query(sock)   # List of queried data blocks
+            queryEndTime = time.time()
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect((NODE_HOST, NODE_PORT))
-        send_RT(queryEndTime - queryStartTime - 2*TIMEOUT, data_blocks, sock)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((NODE_HOST, NODE_PORT))
+            send_RT(queryEndTime - queryStartTime - 2*TIMEOUT, data_blocks, sock)
 
 def main():
     connect_to_edge_node()

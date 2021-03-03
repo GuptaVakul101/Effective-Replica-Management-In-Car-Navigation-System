@@ -84,7 +84,7 @@ def service_connection(key, mask, sel):
                 for id in json_data["RT_data_blocks"]:
                     RT_DATA[id] = json_data["RT"]
                     NUM_ACCESS_DATA[id] += 1
-                print(NUM_ACCESS_DATA)
+                # print(NUM_ACCESS_DATA)
                 data.outb = bytearray()
                 lock.release()
 
