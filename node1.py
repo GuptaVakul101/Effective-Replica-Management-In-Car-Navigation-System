@@ -11,12 +11,14 @@ from utils import recv_timeout
 from time import sleep
 import threading
 from threading import Thread
+import psutil
 
 CENTRAL_HOST='127.0.0.1'
 CENTRAL_PORT=65432
 
 SELF_HOST='127.0.0.1'
 SELF_PORT=65433
+ALPHA = 0.5
 
 def find_data_blocks(data_blocks):
     return_data = []
@@ -28,7 +30,45 @@ def find_data_blocks(data_blocks):
 def send_info_central(sock):
     global NUM_ACCESS_DATA
     global RT_DATA
-    dict_RT = {"RT_DATA": RT_DATA, "NUM_ACCESS_DATA": NUM_ACCESS_DATA, "id": 1}
+
+    uf = psutil.cpu_percent()/10**2
+    nc = psutil.cpu_count(logical = False)
+    fr = psutil.cpu_freq().max
+    cpu_capacity = fr * nc * (1 - uf)
+
+    disk_read_speed = psutil.disk_io_counters().read_time/10**3
+    disk_write_speed = psutil.disk_io_counters().write_time/10**3
+    disk_performance = disk_read_speed * ALPHA + disk_write_speed * (1 - ALPHA)
+
+    mem_usage = psutil.virtual_memory().percent/10**2
+    mem_size = psutil.virtual_memory().total/10**6
+
+    load_capacity_memory = mem_size * (1 - mem_usage)
+    load_capacity_disk = psutil.disk_usage('/').free/10**6
+    print(cpu_capacity)
+    print(disk_performance)
+    print(load_capacity_memory)
+    print(load_capacity_disk)
+    sub_objective_1 = cpu_capacity + disk_performance + load_capacity_memory + load_capacity_disk
+
+    f = 0
+    for val in DATA:
+        if val != 1:
+            f += 1
+    total_disk_space = psutil.disk_usage('/').total/10**6
+    bsize = 1
+    beta = (f * bsize) / total_disk_space
+
+    net_dis_coeff = 1
+    data_block_size = 1
+    Ctr = 10
+
+    sub_objective_3 = 1 / (net_dis_coeff * data_block_size * Ctr)
+
+    print(beta)
+    print(sub_objective_3)
+
+    dict_RT = {"RT_DATA": RT_DATA, "NUM_ACCESS_DATA": NUM_ACCESS_DATA, "id": 1, "sub_objective_1": sub_objective_1, "beta": beta, "sub_objective_3": sub_objective_3}
     json_RT = json.dumps(dict_RT)
     sock.sendall(bytes(json_RT, encoding="utf-8"))
 
