@@ -25,6 +25,30 @@ SUB_WEIGHT_PLACEMENT_1 = 0.4
 SUB_WEIGHT_PLACEMENT_2 = 0.2
 SUB_WEIGHT_PLACEMENT_3 = 0.4
 
+NODE_HOSTS = ['127.0.0.1']
+NODE_PORTS = [65433]
+
+def sendReplicas(replicas_added, replicas_removed):
+    for id in range(len(NODE_HOSTS)):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((NODE_HOSTS[id], NODE_PORTS[id]))
+
+            new_data_blocks = {}
+            for i in range(len(replicas_added)):
+                if replicas_added[i] == id:
+                    new_data_blocks[i] = DATA[i]
+
+            for i in range(len(replicas_removed)):
+                if replicas_removed[i] == id:
+                    new_data_blocks[i] = -1
+
+            dict = {"new_data_blocks": new_data_blocks}
+            json_new_blocks = json.dumps(dict)
+            print(json_new_blocks)
+
+            sock.sendall(bytes(json_new_blocks, encoding="utf-8"))
+            print("done")
+
 def accept_wrapper(sock, sel):
     conn, addr = sock.accept()  # Should be ready to read
     print('accepted connection from', addr)
@@ -156,6 +180,7 @@ def main():
                 print("Objective function:", OBJECTIVE)
 
                 OBJECTIVE = sorted(range(len(OBJECTIVE)), key=lambda k: OBJECTIVE[k])
+                print("Sorted objective indexes:", OBJECTIVE)
 
                 # Placement
                 current_num_replicas = [0 for x in range(NUM_DATA_BLOCKS)]
@@ -166,22 +191,26 @@ def main():
 
                 replicas_added = [-1 for x in range(NUM_DATA_BLOCKS)]
 
-                for i in range(NUM_EDGE_NODES-1, 0, -1):
+                for i in range(NUM_EDGE_NODES-1, -1, -1):
+                    edge_id = OBJECTIVE[i]
                     for j in range(NUM_DATA_BLOCKS):
-                        if replicas_added[j] == -1 and OPT_NUM_REPLICA[j] > current_num_replicas[j] and BIN_ENCODING[i][j] == 0:
-                            BIN_ENCODING[i][j] = 1
-                            replicas_added[j] = i
+                        if replicas_added[j] == -1 and OPT_NUM_REPLICA[j] > current_num_replicas[j] and BIN_ENCODING[edge_id][j] == 0:
+                            BIN_ENCODING[edge_id][j] = 1
+                            replicas_added[j] = edge_id
 
                 replicas_removed = [-1 for x in range(NUM_DATA_BLOCKS)]
 
                 for i in range(NUM_EDGE_NODES):
+                    edge_id = OBJECTIVE[i]
                     for j in range(NUM_DATA_BLOCKS):
-                        if replicas_removed[j] == -1 and OPT_NUM_REPLICA[j] < current_num_replicas[j] and BIN_ENCODING[i][j] == 1:
-                            BIN_ENCODING[i][j] = 0
-                            replicas_removed[j] = i
+                        if replicas_removed[j] == -1 and OPT_NUM_REPLICA[j] < current_num_replicas[j] and BIN_ENCODING[edge_id][j] == 1:
+                            BIN_ENCODING[edge_id][j] = 0
+                            replicas_removed[j] = edge_id
 
                 print("Replicas added:", replicas_added)
                 print("Replicas removed:", replicas_removed)
+
+                sendReplicas(replicas_added, replicas_removed)
 
                 # Resetting clock
                 CLOCK = 0

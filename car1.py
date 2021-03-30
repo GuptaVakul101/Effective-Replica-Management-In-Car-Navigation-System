@@ -17,7 +17,7 @@ def query(sock):
     sock.sendall(bytes(data, encoding="utf-8"))
     received = recv_timeout(sock)
     received = received.decode("utf-8")
-    # print(received)
+    print(received)
     return data_blocks
 
 def send_RT(RT, data_blocks, sock):

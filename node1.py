@@ -96,6 +96,7 @@ def service_connection(key, mask, sel):
     global lock
     global NUM_ACCESS_DATA
     global RT_DATA
+    global DATA
     sock = key.fileobj
     data = key.data
     if mask & selectors.EVENT_READ:
@@ -124,6 +125,10 @@ def service_connection(key, mask, sel):
                 # print(NUM_ACCESS_DATA)
                 data.outb = bytearray()
                 lock.release()
+            elif "new_data_blocks" in json_data.keys():
+                print("New data blocks received:", json_data["new_data_blocks"])
+                for key in json_data["new_data_blocks"].keys():
+                    DATA[int(key)] = json_data["new_data_blocks"][key]
 
 def connect_to_clients():
     sel = selectors.DefaultSelector()
