@@ -45,10 +45,6 @@ def send_info_central(sock):
 
     load_capacity_memory = mem_size * (1 - mem_usage)
     load_capacity_disk = psutil.disk_usage('/').free/10**6
-    print(cpu_capacity)
-    print(disk_performance)
-    print(load_capacity_memory)
-    print(load_capacity_disk)
     sub_objective_1 = cpu_capacity + disk_performance + load_capacity_memory + load_capacity_disk
 
     f = 0
@@ -63,8 +59,9 @@ def send_info_central(sock):
     data_block_size = 1
     Ctr = 10
 
-    sub_objective_3 = 1 / (net_dis_coeff * data_block_size * Ctr)
+    sub_objective_3 = 10**5 / (net_dis_coeff * data_block_size * Ctr)
 
+    print(sub_objective_1)
     print(beta)
     print(sub_objective_3)
 
