@@ -30,6 +30,52 @@ SUB_WEIGHT_PLACEMENT_3 = 0.4
 NODE_HOSTS = ['127.0.0.1']
 NODE_PORTS = [65433]
 
+def triggerUnsynchUpdates():
+    global H
+    global SUB_OBJECTIVE_1
+    global RST
+
+    hah = 0
+    for i in range(len(H)):
+        hah += H[i]
+    hah /= NUM_DATA_BLOCKS
+
+    alc = 0
+    for i in range(len(SUB_OBJECTIVE_1)):
+        alc += SUB_OBJECTIVE_1[i]
+    alc /= NUM_EDGE_NODES
+
+    print("hah: ", hah)
+    print("alc: ", alc)
+
+    # handle CASE-2 (alc)
+    for id in range(NUM_EDGE_NODES):
+        if SUB_OBJECTIVE_1[id] > alc:
+            update_data_blocks = {}
+            for j in range(NUM_DATA_BLOCKS):
+                if RST[id][j] == 1:
+                    update_data_blocks[j] = DATA[j]
+                    RST[id][j] = 0
+            if len(update_data_blocks.keys()) != 0:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.connect((NODE_HOSTS[id], NODE_PORTS[id]))
+                    dict = {"new_data_blocks": update_data_blocks}
+                    json_update_blocks = json.dumps(dict)
+                    sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
+
+    # handle CASE-1 (hah)
+    for id in range(NUM_DATA_BLOCKS):
+        if H[id] > hah:
+            for j in range(NUM_EDGE_NODES):
+                if RST[j][id] == 1:
+                    update_data_blocks = {id: DATA[id]}
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                        sock.connect((NODE_HOSTS[j], NODE_PORTS[j]))
+                        dict = {"new_data_blocks": update_data_blocks}
+                        json_update_blocks = json.dumps(dict)
+                        sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
+                    RST[j][id] = 0
+
 def sendUpdateData(send_write_updates):
     for id in range(NUM_EDGE_NODES):
         update_data_blocks = {}
@@ -250,8 +296,11 @@ def main():
                 sendReplicas(replicas_added, replicas_removed)
 
                 # Replica Synchronization
-
                 replica_synchronization()
+
+                # trigger unsynchronized updates
+                triggerUnsynchUpdates()
+
                 # Resetting clock
                 CLOCK = 0
                 GLOBAL_CLOCK += 1
