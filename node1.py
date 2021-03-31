@@ -84,6 +84,12 @@ def connect_to_central():
             RT_DATA[id] = -1
         lock.release()
 
+def handleUpdateQuery(json_data):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.connect((CENTRAL_HOST, CENTRAL_PORT))
+        json_help = json.dumps(json_data)
+        sock.sendall(bytes(json_help, encoding="utf-8"))
+
 def accept_wrapper(sock, sel):
     conn, addr = sock.accept()  # Should be ready to read
     print('Edge node 1 accepted connection from', addr)
@@ -112,23 +118,28 @@ def service_connection(key, mask, sel):
             str_data = data.outb.decode("utf-8")
             json_data = json.loads(str_data)
             if "data_blocks" in json_data.keys():
-                return_data = find_data_blocks(json_data["data_blocks"])
-                return_data = {"data": return_data}
-                return_data = json.dumps(return_data)
-                sock.sendall(bytes(return_data, encoding="utf-8"))
-                data.outb = bytearray()
+                if json_data["type"] == 0:
+                    return_data = find_data_blocks(json_data["data_blocks"])
+                    return_data = {"data": return_data}
+                    return_data = json.dumps(return_data)
+                    sock.sendall(bytes(return_data, encoding="utf-8"))
+                    # data.outb = bytearray()
+                else:
+                    handleUpdateQuery(json_data)
+                    # data.outb = bytearray()
             elif "RT" in json_data.keys():
                 lock.acquire()
                 for id in json_data["RT_data_blocks"]:
                     RT_DATA[id] = json_data["RT"]
                     NUM_ACCESS_DATA[id] += 1
                 # print(NUM_ACCESS_DATA)
-                data.outb = bytearray()
+                # data.outb = bytearray()
                 lock.release()
             elif "new_data_blocks" in json_data.keys():
                 print("New data blocks received:", json_data["new_data_blocks"])
                 for key in json_data["new_data_blocks"].keys():
                     DATA[int(key)] = json_data["new_data_blocks"][key]
+            data.outb = bytearray()
 
 def connect_to_clients():
     sel = selectors.DefaultSelector()

@@ -11,6 +11,8 @@ SELF_PORT=65432
 
 NUM_DATA_BLOCKS = 15
 NUM_EDGE_NODES = 2
+# SYNC_W = (NUM_EDGE_NODES // 2) + 1
+SYNC_W = 1
 
 T = 2
 K = 5
@@ -27,6 +29,32 @@ SUB_WEIGHT_PLACEMENT_3 = 0.4
 
 NODE_HOSTS = ['127.0.0.1']
 NODE_PORTS = [65433]
+
+def sendUpdateData(send_write_updates):
+    for id in range(NUM_EDGE_NODES):
+        update_data_blocks = {}
+        for j in range(NUM_DATA_BLOCKS):
+            if send_write_updates[id][j] == 1:
+                update_data_blocks[j] = DATA[j]
+        if len(update_data_blocks.keys()) != 0:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.connect((NODE_HOSTS[id], NODE_PORTS[id]))
+                dict = {"new_data_blocks": update_data_blocks}
+                json_update_blocks = json.dumps(dict)
+                sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
+
+def replica_synchronization():
+    send_write_updates = [[0 for x in range(NUM_DATA_BLOCKS)] for y in range(NUM_EDGE_NODES)]
+    for i in range(NUM_EDGE_NODES):
+        for j in range(NUM_DATA_BLOCKS):
+            if WRITE_REQUESTS[i][j] == 1:
+                for k in range(0, NUM_EDGE_NODES):
+                    if k < max(0, i - SYNC_W // 2) or k >= min(NUM_EDGE_NODES, i + SYNC_W // 2 + 1):
+                        RST[i][j] = 1
+                    else:
+                        send_write_updates[k][j] = 1
+                        RST[i][j] = 0
+    sendUpdateData(send_write_updates)
 
 def sendReplicas(replicas_added, replicas_removed):
     for id in range(len(NODE_HOSTS)):
@@ -62,6 +90,8 @@ def service_connection(key, mask, sel):
     global CLOCK
     global F
     global ART
+    global DATA
+    global WRITE_REQUESTS
 
     sock = key.fileobj
     data = key.data
@@ -90,6 +120,13 @@ def service_connection(key, mask, sel):
                 if CLOCK_HELPER == NUM_EDGE_NODES:
                     CLOCK += 1
                     CLOCK_HELPER = 0
+            elif "data_blocks" in json_data.keys():
+                print(json_data)
+                for id in range(len(json_data["data_blocks"])):
+                    WRITE_REQUESTS[json_data["id"] - 1][json_data["data_blocks"][id]] = 1
+                    DATA[json_data["data_blocks"][id]] = json_data["values"][id]
+
+            data.outb = bytearray()
 
 def main():
     global CLOCK
@@ -212,6 +249,9 @@ def main():
 
                 sendReplicas(replicas_added, replicas_removed)
 
+                # Replica Synchronization
+
+                replica_synchronization()
                 # Resetting clock
                 CLOCK = 0
                 GLOBAL_CLOCK += 1
@@ -267,4 +307,8 @@ if __name__ == "__main__":
     SUB_OBJECTIVE_3 = [0 for x in range(NUM_EDGE_NODES)]
     global OBJECTIVE
     OBJECTIVE = [0 for x in range(NUM_EDGE_NODES)]
+    global WRITE_REQUESTS
+    WRITE_REQUESTS = [[0 for x in range(NUM_DATA_BLOCKS)] for y in range(NUM_EDGE_NODES)]
+    global RST
+    RST = [[0 for x in range(NUM_DATA_BLOCKS)] for y in range(NUM_EDGE_NODES)]
     main()

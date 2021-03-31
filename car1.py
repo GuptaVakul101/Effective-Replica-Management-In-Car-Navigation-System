@@ -3,6 +3,7 @@ import time
 import random
 import json
 import struct
+import sys
 
 from central import NUM_DATA_BLOCKS
 from utils import recv_timeout, TIMEOUT
@@ -12,7 +13,15 @@ NODE_PORT=65433
 
 def query(sock):
     data_blocks = random.sample(range(0, NUM_DATA_BLOCKS), random.randint(1, NUM_DATA_BLOCKS))
-    data = {"data_blocks": data_blocks}
+    choiceList = [0, 1]
+    distList = [0, 1]
+    type = random.choices(choiceList, distList)
+    data = {}
+    values = [random.randint(0,sys.maxsize) for x in range(len(data_blocks))]
+    if type[0] == 0:
+        data = {"data_blocks": data_blocks, "type": type[0]}
+    else:
+        data = {"data_blocks": data_blocks, "type": type[0], "values": values, "id": 1}
     data = json.dumps(data)
     sock.sendall(bytes(data, encoding="utf-8"))
     received = recv_timeout(sock)
