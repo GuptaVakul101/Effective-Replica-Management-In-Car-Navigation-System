@@ -30,6 +30,62 @@ SUB_WEIGHT_PLACEMENT_3 = 0.4
 NODE_HOSTS = ['127.0.0.1']
 NODE_PORTS = [65433]
 
+def handle_node_failure():
+    global NODE_FAILURE
+
+    potential_data_blocks = {}
+    for i in range(NUM_EDGE_NODES):
+        if NODE_FAILURE[i] == 1:
+            for j in range(NUM_DATA_BLOCKS):
+                if BIN_ENCODING[i][j] == 1:
+                    potential_data_blocks.add(j)
+
+    if len(potential_data_blocks) == 0:
+        for i in range(NUM_EDGE_NODES):
+            NODE_FAILURE[i] = 0
+        return
+
+    sco = 0
+    asel = 0
+    for i in range(NUM_DATA_BLOCKS):
+        sco += H[i]
+
+    cost = [1 for x in range(NUM_DATA_BLOCKS)]
+
+    sel = [0 for x in range(NUM_DATA_BLOCKS)]
+    for id in potential_data_blocks:
+        sel[id] = H[id]/sco
+        sel[id] /= cost[id]
+        asel += sel[id]
+
+    asel /= len(potential_data_blocks)
+
+    recoverable_data_blocks = {}
+    for id in potential_data_blocks:
+        if sel[id] > asel:
+            recoverable_data_blocks.add(id)
+
+    for i in range(NUM_EDGE_NODES-1, -1, -1):
+        edge_id = OBJECTIVE[i]
+        if ACTIVE_NODES[edge_id] == 0:
+            print("Failed node", i+1, "skipped")
+            continue
+        recovery_data_blocks = {}
+        for j in recoverable_data_blocks:
+            if BIN_ENCODING[edge_id][j] == 0:
+                recovery_data_blocks[j] = DATA[j]
+        for j in new_data_blocks.keys():
+            recoverable_data_blocks.remove(j)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((NODE_HOSTS[edge_id], NODE_PORTS[edge_id]))
+            dict = {"new_data_blocks": recovery_data_blocks}
+            json_recovery_blocks = json.dumps(dict)
+            sock.sendall(bytes(json_recovery_blocks, encoding="utf-8"))
+
+    for i in range(NUM_EDGE_NODES):
+        NODE_FAILURE[i] = 0
+
+
 def triggerUnsynchUpdates():
     global H
     global SUB_OBJECTIVE_1
@@ -57,11 +113,12 @@ def triggerUnsynchUpdates():
                     update_data_blocks[j] = DATA[j]
                     RST[id][j] = 0
             if len(update_data_blocks.keys()) != 0:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.connect((NODE_HOSTS[id], NODE_PORTS[id]))
-                    dict = {"new_data_blocks": update_data_blocks}
-                    json_update_blocks = json.dumps(dict)
-                    sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
+                if ACTIVE_NODES[id] == 1:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                        sock.connect((NODE_HOSTS[id], NODE_PORTS[id]))
+                        dict = {"new_data_blocks": update_data_blocks}
+                        json_update_blocks = json.dumps(dict)
+                        sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
 
     # handle CASE-1 (hah)
     for id in range(NUM_DATA_BLOCKS):
@@ -69,12 +126,13 @@ def triggerUnsynchUpdates():
             for j in range(NUM_EDGE_NODES):
                 if RST[j][id] == 1:
                     update_data_blocks = {id: DATA[id]}
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                        sock.connect((NODE_HOSTS[j], NODE_PORTS[j]))
-                        dict = {"new_data_blocks": update_data_blocks}
-                        json_update_blocks = json.dumps(dict)
-                        sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
-                    RST[j][id] = 0
+                    if ACTIVE_NODES[j] == 1:
+                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                            sock.connect((NODE_HOSTS[j], NODE_PORTS[j]))
+                            dict = {"new_data_blocks": update_data_blocks}
+                            json_update_blocks = json.dumps(dict)
+                            sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
+                        RST[j][id] = 0
 
 def sendUpdateData(send_write_updates):
     for id in range(NUM_EDGE_NODES):
@@ -83,11 +141,12 @@ def sendUpdateData(send_write_updates):
             if send_write_updates[id][j] == 1:
                 update_data_blocks[j] = DATA[j]
         if len(update_data_blocks.keys()) != 0:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.connect((NODE_HOSTS[id], NODE_PORTS[id]))
-                dict = {"new_data_blocks": update_data_blocks}
-                json_update_blocks = json.dumps(dict)
-                sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
+            if ACTIVE_NODES[id] == 1:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.connect((NODE_HOSTS[id], NODE_PORTS[id]))
+                    dict = {"new_data_blocks": update_data_blocks}
+                    json_update_blocks = json.dumps(dict)
+                    sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
 
 def replica_synchronization():
     send_write_updates = [[0 for x in range(NUM_DATA_BLOCKS)] for y in range(NUM_EDGE_NODES)]
@@ -104,6 +163,10 @@ def replica_synchronization():
 
 def sendReplicas(replicas_added, replicas_removed):
     for id in range(len(NODE_HOSTS)):
+        print('Active nodes', ACTIVE_NODES)
+        if ACTIVE_NODES[id] == 0:
+            continue
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((NODE_HOSTS[id], NODE_PORTS[id]))
 
@@ -138,6 +201,8 @@ def service_connection(key, mask, sel):
     global ART
     global DATA
     global WRITE_REQUESTS
+    global NODE_FAILURE
+    global ACTIVE_NODES
 
     sock = key.fileobj
     data = key.data
@@ -171,6 +236,9 @@ def service_connection(key, mask, sel):
                 for id in range(len(json_data["data_blocks"])):
                     WRITE_REQUESTS[json_data["id"] - 1][json_data["data_blocks"][id]] = 1
                     DATA[json_data["data_blocks"][id]] = json_data["values"][id]
+            elif "failure_id" in json_data.keys():
+                NODE_FAILURE[json_data["failure_id"]-1] = 1
+                ACTIVE_NODES[json_data["failure_id"]-1] = 0
 
             data.outb = bytearray()
 
@@ -301,6 +369,9 @@ def main():
                 # trigger unsynchronized updates
                 triggerUnsynchUpdates()
 
+                # Handle node failure
+                handle_node_failure()
+
                 # Resetting clock
                 CLOCK = 0
                 GLOBAL_CLOCK += 1
@@ -360,4 +431,8 @@ if __name__ == "__main__":
     WRITE_REQUESTS = [[0 for x in range(NUM_DATA_BLOCKS)] for y in range(NUM_EDGE_NODES)]
     global RST
     RST = [[0 for x in range(NUM_DATA_BLOCKS)] for y in range(NUM_EDGE_NODES)]
+    global NODE_FAILURE
+    NODE_FAILURE = [0 for x in range(NUM_EDGE_NODES)]
+    global ACTIVE_NODES
+    ACTIVE_NODES = [1 for x in range(NUM_EDGE_NODES)]
     main()

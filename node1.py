@@ -5,6 +5,7 @@ import selectors
 import types
 import struct
 from central import NUM_DATA_BLOCKS, T
+from collector import HEARTBEAT_PERIOD
 import json
 import time
 from utils import recv_timeout
@@ -13,12 +14,24 @@ import threading
 from threading import Thread
 import psutil
 
-CENTRAL_HOST='127.0.0.1'
-CENTRAL_PORT=65432
+CENTRAL_HOST = '127.0.0.1'
+CENTRAL_PORT = 65432
 
-SELF_HOST='127.0.0.1'
-SELF_PORT=65433
+COLLECTOR_HOST = '127.0.0.1'
+COLLECTOR_PORT = 65434
+
+SELF_HOST = '127.0.0.1'
+SELF_PORT = 65433
 ALPHA = 0.5
+
+def send_heartbeat_packet():
+    while True:
+        sleep(HEARTBEAT_PERIOD)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((COLLECTOR_HOST, COLLECTOR_PORT))
+            dict_id = {"id": 1}
+            json_id = json.dumps(dict_id)
+            sock.sendall(bytes(json_id, encoding="utf-8"))
 
 def find_data_blocks(data_blocks):
     return_data = []
@@ -160,6 +173,7 @@ def connect_to_clients():
 def main():
     Thread(target = connect_to_central).start()
     Thread(target = connect_to_clients).start()
+    Thread(target = send_heartbeat_packet).start()
 
 if __name__ == "__main__":
     global DATA
