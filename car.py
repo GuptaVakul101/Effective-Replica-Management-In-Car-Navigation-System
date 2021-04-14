@@ -41,6 +41,7 @@ def connect_to_edge_node():
             queryStartTime = time.time()
             data_blocks = query(sock)   # List of queried data blocks
             queryEndTime = time.time()
+            # print(queryEndTime - queryStartTime)
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((NODE_HOST, NODE_PORT))
