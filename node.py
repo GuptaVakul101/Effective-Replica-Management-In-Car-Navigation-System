@@ -58,8 +58,6 @@ def send_info_central(sock):
 
     load_capacity_memory = mem_size * (1 - mem_usage)
     load_capacity_disk = psutil.disk_usage('/').free/10**6
-    # disk_usage = psutil.disk_usage('/').free / psutil.disk_usage('/').total
-    # print("vakul", disk_usage)
     sub_objective_1 = cpu_capacity + disk_performance + load_capacity_memory + load_capacity_disk
 
     f = 0
@@ -147,8 +145,6 @@ def service_connection(key, mask, sel):
                 for id in json_data["RT_data_blocks"]:
                     RT_DATA[id] = json_data["RT"]
                     NUM_ACCESS_DATA[id] += 1
-                # print(NUM_ACCESS_DATA)
-                # data.outb = bytearray()
                 lock.release()
             elif "new_data_blocks" in json_data.keys():
                 print("New data blocks received:", json_data["new_data_blocks"])
