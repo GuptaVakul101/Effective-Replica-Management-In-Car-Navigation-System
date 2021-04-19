@@ -18,6 +18,7 @@ HEARTBEAT_PERIOD = 10
 
 def check_failure():
     while True:
+        print("====================================================================================================")
         sleep(HEARTBEAT_PERIOD)
         for i in range(NUM_EDGE_NODES):
             if NODE_FAILURE[i] == 0:
@@ -57,6 +58,7 @@ def service_connection(key, mask, sel):
             json_data = json.loads(str_data)
             if "id" in json_data.keys():
                 NODE_FAILURE[json_data['id']-1] = 1
+                print("Heartbeat packet received for edge node", json_data['id'])
 
             data.outb = bytearray()
 

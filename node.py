@@ -27,6 +27,9 @@ ALPHA = 0.5
 def send_heartbeat_packet():
     while True:
         sleep(HEARTBEAT_PERIOD)
+        print("====================================================================================================")
+        print("Sending heartbeat packet to collector node...")
+        print("====================================================================================================")
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((COLLECTOR_HOST, COLLECTOR_PORT))
             dict_id = {"id": 1}
@@ -41,6 +44,8 @@ def find_data_blocks(data_blocks):
     return return_data
 
 def send_info_central(sock):
+    print("====================================================================================================")
+    print("                              LOAD CAPACITY STATISTICS")
     global NUM_ACCESS_DATA
     global RT_DATA
 
@@ -49,16 +54,27 @@ def send_info_central(sock):
     fr = psutil.cpu_freq().max
     cpu_capacity = fr * nc * (1 - uf)
 
+    print("CPU processing capacity:", cpu_capacity)
+
     disk_read_speed = psutil.disk_io_counters().read_time/10**3
     disk_write_speed = psutil.disk_io_counters().write_time/10**3
     disk_performance = disk_read_speed * ALPHA + disk_write_speed * (1 - ALPHA)
 
+    print("Disk read/write performance:", disk_performance)
+
     mem_usage = psutil.virtual_memory().percent/10**2
     mem_size = psutil.virtual_memory().total/10**6
-
     load_capacity_memory = mem_size * (1 - mem_usage)
+
+    print("Load capacity of memory:", load_capacity_memory)
+
     load_capacity_disk = psutil.disk_usage('/').free/10**6
+
+    print("Load capacity of disk space:", load_capacity_disk)
+
     sub_objective_1 = cpu_capacity + disk_performance + load_capacity_memory + load_capacity_disk
+
+    print("Sub objective 1:", sub_objective_1)
 
     f = 0
     for val in DATA:
@@ -68,19 +84,21 @@ def send_info_central(sock):
     bsize = 1
     beta = (f * bsize) / total_disk_space
 
+    print("Usage of storage space:", beta)
+
     net_dis_coeff = 1
     data_block_size = 1
     Ctr = 10
 
     sub_objective_3 = 10**5 / (net_dis_coeff * data_block_size * Ctr)
 
-    print(sub_objective_1)
-    print(beta)
-    print(sub_objective_3)
+    print("Sub objective 3:", sub_objective_3)
 
     dict_RT = {"RT_DATA": RT_DATA, "NUM_ACCESS_DATA": NUM_ACCESS_DATA, "id": 1, "sub_objective_1": sub_objective_1, "beta": beta, "sub_objective_3": sub_objective_3}
     json_RT = json.dumps(dict_RT)
     sock.sendall(bytes(json_RT, encoding="utf-8"))
+
+    print("====================================================================================================")
 
 def connect_to_central():
     global lock
@@ -136,10 +154,8 @@ def service_connection(key, mask, sel):
                     return_data = {"data": return_data}
                     return_data = json.dumps(return_data)
                     sock.sendall(bytes(return_data, encoding="utf-8"))
-                    # data.outb = bytearray()
                 else:
                     handleUpdateQuery(json_data)
-                    # data.outb = bytearray()
             elif "RT" in json_data.keys():
                 lock.acquire()
                 for id in json_data["RT_data_blocks"]:
@@ -147,7 +163,10 @@ def service_connection(key, mask, sel):
                     NUM_ACCESS_DATA[id] += 1
                 lock.release()
             elif "new_data_blocks" in json_data.keys():
-                print("New data blocks received:", json_data["new_data_blocks"])
+                print("====================================================================================================")
+                print("Updation request from central server...")
+                print("Updation data blocks:", json_data["new_data_blocks"])
+                print("====================================================================================================")
                 for key in json_data["new_data_blocks"].keys():
                     DATA[int(key)] = json_data["new_data_blocks"][key]
             data.outb = bytearray()

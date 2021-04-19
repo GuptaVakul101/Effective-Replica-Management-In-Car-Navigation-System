@@ -60,6 +60,11 @@ def handle_node_failure():
 
     asel /= len(potential_data_blocks)
 
+    print("sco:", sco)
+    print()
+    print("asel:", asel)
+    print()
+
     recoverable_data_blocks = {}
     for id in potential_data_blocks:
         if sel[id] > asel:
@@ -68,7 +73,6 @@ def handle_node_failure():
     for i in range(NUM_EDGE_NODES-1, -1, -1):
         edge_id = OBJECTIVE[i]
         if ACTIVE_NODES[edge_id] == 0:
-            print("Failed node", i+1, "skipped")
             continue
         recovery_data_blocks = {}
         for j in recoverable_data_blocks:
@@ -76,6 +80,8 @@ def handle_node_failure():
                 recovery_data_blocks[j] = DATA[j]
         for j in new_data_blocks.keys():
             recoverable_data_blocks.remove(j)
+        print("Recoverable data blocks sent to edge node", i+1, ":", recovery_data_blocks)
+        print()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((NODE_HOSTS[edge_id], NODE_PORTS[edge_id]))
             dict = {"new_data_blocks": recovery_data_blocks}
@@ -102,11 +108,15 @@ def triggerUnsynchUpdates():
     alc /= NUM_EDGE_NODES
 
     print("hah: ", hah)
+    print()
     print("alc: ", alc)
+    print()
 
     # handle CASE-2 (alc)
+    print("Edge nodes with strong load performance: ", end=' ')
     for id in range(NUM_EDGE_NODES):
         if SUB_OBJECTIVE_1[id] > alc:
+            print(id+1, ", ", end = ' ')
             update_data_blocks = {}
             for j in range(NUM_DATA_BLOCKS):
                 if RST[id][j] == 1:
@@ -119,10 +129,13 @@ def triggerUnsynchUpdates():
                         dict = {"new_data_blocks": update_data_blocks}
                         json_update_blocks = json.dumps(dict)
                         sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
+    print()
 
+    print("Hot data blocks: ", end=' ')
     # handle CASE-1 (hah)
     for id in range(NUM_DATA_BLOCKS):
         if H[id] > hah:
+            print(id+1, ", ", end = ' ')
             for j in range(NUM_EDGE_NODES):
                 if RST[j][id] == 1:
                     update_data_blocks = {id: DATA[id]}
@@ -133,6 +146,7 @@ def triggerUnsynchUpdates():
                             json_update_blocks = json.dumps(dict)
                             sock.sendall(bytes(json_update_blocks, encoding="utf-8"))
                         RST[j][id] = 0
+    print()
 
 def sendUpdateData(send_write_updates):
     for id in range(NUM_EDGE_NODES):
@@ -159,11 +173,12 @@ def replica_synchronization():
                     else:
                         send_write_updates[k][j] = 1
                         RST[i][j] = 0
+    print("RST:", RST)
+    print()
     sendUpdateData(send_write_updates)
 
 def sendReplicas(replicas_added, replicas_removed):
     for id in range(len(NODE_HOSTS)):
-        print('Active nodes', ACTIVE_NODES)
         if ACTIVE_NODES[id] == 0:
             continue
 
@@ -181,10 +196,8 @@ def sendReplicas(replicas_added, replicas_removed):
 
             dict = {"new_data_blocks": new_data_blocks}
             json_new_blocks = json.dumps(dict)
-            print(json_new_blocks)
 
             sock.sendall(bytes(json_new_blocks, encoding="utf-8"))
-            print("done")
 
 def accept_wrapper(sock, sel):
     conn, addr = sock.accept()  # Should be ready to read
@@ -232,7 +245,6 @@ def service_connection(key, mask, sel):
                     CLOCK += 1
                     CLOCK_HELPER = 0
             elif "data_blocks" in json_data.keys():
-                print(json_data)
                 for id in range(len(json_data["data_blocks"])):
                     WRITE_REQUESTS[json_data["id"] - 1][json_data["data_blocks"][id]] = 1
                     DATA[json_data["data_blocks"][id]] = json_data["values"][id]
@@ -273,6 +285,9 @@ def main():
         for key, mask in events:
             if CLOCK == K:
 
+                print("====================================================================================================")
+                print("                              REPLICA CREATION STATISTICS")
+                print()
                 # Replica Creation
                 # ART
                 for j in range(NUM_DATA_BLOCKS):
@@ -285,15 +300,24 @@ def main():
                     if non_zero_art > 0:
                         ART_FINAL[j] /= non_zero_art
 
+                print("ART:", ART_FINAL)
+                print()
+
                 # H
                 for j in range(NUM_DATA_BLOCKS):
                     for i in range(K):
                         H[j] += F[i][j]
                     H[j] /= K
 
+                print("h:", H)
+                print()
+
                 # HEAT
                 for j in range(NUM_DATA_BLOCKS):
                     HEAT[j] = H[j] + H_PREV[j]
+
+                print("heat:", HEAT)
+                print()
 
                 # Resetting H
                 H_PREV = H
@@ -301,14 +325,23 @@ def main():
                 # DF
                 for j in range(NUM_DATA_BLOCKS):
                     DF[j] = HEAT[j]*ART_FINAL[j]
+
                 print("DF:", DF)
+                print()
 
                 # Calculating optimal number of replicas
                 for j in range(NUM_DATA_BLOCKS):
                     OPT_NUM_REPLICA[j] = ALPHA*OPT_NUM_REPLICA_PREV[j] + ((1 - ALPHA)*DF[j])/STATIC_FACTOR
+                    OPT_NUM_REPLICA[j] *= 10**5
                 OPT_NUM_REPLICA_PREV = OPT_NUM_REPLICA
-                print("Opt num replica:",OPT_NUM_REPLICA)
 
+                print("Optimal number of replicas:", OPT_NUM_REPLICA)
+                print()
+
+
+                print("====================================================================================================")
+                print("                              REPLICA PLACEMENT STATISTICS")
+                print()
 
                 # Replica Placement
                 for id in range(NUM_EDGE_NODES):
@@ -328,10 +361,13 @@ def main():
                 for id in range(NUM_EDGE_NODES):
                     OBJECTIVE[id] = SUB_WEIGHT_PLACEMENT_1*SUB_OBJECTIVE_1[id] + SUB_WEIGHT_PLACEMENT_2*SUB_OBJECTIVE_2[id] + SUB_WEIGHT_PLACEMENT_3*SUB_OBJECTIVE_3[id]
 
-                print("Objective function:", OBJECTIVE)
+                print("Objective function values:", OBJECTIVE)
+                print()
 
                 OBJECTIVE = sorted(range(len(OBJECTIVE)), key=lambda k: OBJECTIVE[k])
-                print("Sorted objective indexes:", OBJECTIVE)
+
+                print("Sorted edge node indexes based upon OBJECTIVE values:", OBJECTIVE)
+                print()
 
                 # Placement
                 current_num_replicas = [0 for x in range(NUM_DATA_BLOCKS)]
@@ -358,19 +394,30 @@ def main():
                             BIN_ENCODING[edge_id][j] = 0
                             replicas_removed[j] = edge_id
 
-                print("Replicas added:", replicas_added)
-                print("Replicas removed:", replicas_removed)
+                # print("Replicas added:", replicas_added)
+                # print("Replicas removed:", replicas_removed)
 
                 sendReplicas(replicas_added, replicas_removed)
+
+                print("====================================================================================================")
+                print("                              REPLICA SYNCHRONIZATION STATISTICS")
+                print()
 
                 # Replica Synchronization
                 replica_synchronization()
 
                 # trigger unsynchronized updates
+                print("Checking for unsynchronous updates...")
                 triggerUnsynchUpdates()
+
+                print("====================================================================================================")
+                print("                              REPLICA RECOVERY STATISTICS")
+                print()
 
                 # Handle node failure
                 handle_node_failure()
+
+                print("====================================================================================================")
 
                 # Resetting clock
                 CLOCK = 0
